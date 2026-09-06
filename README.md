@@ -18,3 +18,47 @@
 
 ---
  Now we can start our script! IN THE NEXT GIT COMMIT HEH
+
+ #How to use git (BASICS):
+ - Create a directory where you want to store your projects
+   ```mkdir -p projects/<your_project-name>```
+ - Then make an empty git repository inside your <your_project-name> dir by typing
+   ```git init [for the newer git versions] else git init -b main```
+ - You have now created an empty git repo LOCALLY. View the status of it by
+	    ```git status
+	    ###If you have created a file which you were thinking to add to the repo for example "read.txt":
+	       On branch master
+	
+	No commits yet [### This is the staging area. This is where you'll see all the contents which youll be commiting]
+	
+	Untracked files: 
+	  (use "git add <file>..." to include in what will be committed)
+		read.txt
+	
+	nothing added to commit but untracked files present (use "git add" to track)
+	-----------------------------------------------------------------------------
+	else you'll get 
+	On branch main
+	Your branch is up to date with 'origin/main'.
+	
+	nothing to commit, working tree clean
+	```
+ - Add files to commit using
+   	``` git add <file_name>
+ - Now, Go to github and create a new repo [Once per new project]
+ - Next, we can access that repo by using
+    ```git remote add origin "Your repo link"
+    	use git remote -v to check where out git points to```
+ - Commit your changes by
+   	```git commit -b "Your comment"```
+ - We can change our username and email cause when we use `git log` we get "[main...]". Just helps to know who did it.
+    ``` git config --global user.name "Your name"
+    	git config --global user.email "Your email"
+    ```
+- Now we push by doing:
+  ```git push -u origin main
+  	itll show
+  	username ... : "Your username"
+  	password ... : "Your SSH KEY or Go to dev settings and create a key"
+ ```
+- Done
