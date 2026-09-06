@@ -36,7 +36,6 @@
 		read.txt
 	
 	nothing added to commit but untracked files present (use "git add" to track)
-	-----------------------------------------------------------------------------
 	else you'll get 
 	On branch main
 	Your branch is up to date with 'origin/main'.
