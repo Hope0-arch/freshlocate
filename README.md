@@ -11,10 +11,10 @@
  - Bash is the shell which reads terminal commands and executes them.
  - It is also the scripting language which is used to add functionality.
  - We can think of 4 main parts of Bash script:
-	1.) shebang - `#!/usr/bin/env bash` which basically says when the file is executed tell the OS to go to `usr/bin/env` and run bash which then reads our fil.e
-	2.) Documentation/comments(#) - Used to make our scripts readable so that others can understand what each part expression or statement does.
-	3.) Variables - We use "$" symbol to access the value stored in the variable name e.g: "$PATH" gives "/home/username".
-	4.) Logic/commands - commands which we need the script to execute for our functionality.
+	- 1.) shebang - `#!/usr/bin/env bash` which basically says when the file is executed tell the OS to go to `usr/bin/env` and run bash which then reads our fil.e
+	- 2.) Documentation/comments(#) - Used to make our scripts readable so that others can understand what each part expression or statement does.
+	- 3.) Variables - We use "$" symbol to access the value stored in the variable name e.g: "$PATH" gives "/home/username".
+	- 4.) Logic/commands - commands which we need the script to execute for our functionality.
 
 ---
  Now we can start our script! IN THE NEXT GIT COMMIT HEH
