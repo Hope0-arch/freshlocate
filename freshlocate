@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+if (($# == 0)); then
+	echo "Usage: freshlocate <file_name>"
+	exit 2
+fi
+sudo updatedb && locate -- "$@"
+
