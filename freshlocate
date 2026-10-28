@@ -1,7 +1,192 @@
 #!/usr/bin/env bash
-if (($# == 0)); then
-	echo "Usage: freshlocate <file_name>"
-	exit 2
-fi
-sudo updatedb && locate -- "$@"
+# freshlocate - refresh the locate index only when needed.
+# Designed for Linux systems using plocate or mlocate.
 
+VERSION='1.0.0'
+MAX_AGE=${FRESHLOCATE_MAX_AGE:-1h}
+STATE_DIR=${XDG_STATE_HOME:-"$HOME/.local/state"}/freshlocate
+STAMP=$STATE_DIR/last-update
+
+usage() {
+    cat <<'EOF'
+Usage: freshlocate [OPTIONS] [LOCATE_OPTIONS] PATTERN...
+
+Refresh the locate database when it is old, then search it.
+
+Options:
+  -h, --help            Show this help
+  -V, --version         Show version
+  -c, --check           Check database freshness; do not update
+  -u, --update          Force database update (search is optional)
+      --no-update       Search without updating or asking for sudo
+      --max-age AGE     Refresh threshold (e.g. 30m, 2h, 1d)
+
+AGE units: s=seconds, m=minutes, h=hours, d=days (default: seconds).
+Default threshold: 1 hour; override with FRESHLOCATE_MAX_AGE.
+
+Examples:
+  freshlocate report.pdf
+  freshlocate -i report
+  freshlocate --max-age 10m report
+  freshlocate --check
+  freshlocate --update
+  freshlocate --no-update report
+  freshlocate -- -c report       # Forward locate's -c/--count option
+  freshlocate -- -- -filename    # Search for a pattern starting with '-'
+
+Exit status: locate's exit status when searching; --check returns 0 if
+fresh and 1 otherwise; invalid usage returns 2.
+EOF
+}
+
+error() {
+    printf 'freshlocate: %s\n' "$*" >&2
+}
+
+# Convert an age such as 30m or 2h to a number of seconds.
+parse_age() {
+    local value=$1 amount multiplier
+    if [[ ! $value =~ ^([0-9]{1,9})([smhd]?)$ ]]; then
+        error "invalid age '$value' (expected e.g. 30m, 2h, 1d)"
+        return 1
+    fi
+    amount=$((10#${BASH_REMATCH[1]}))
+    case ${BASH_REMATCH[2]} in
+        ''|s) multiplier=1 ;;
+        m)    multiplier=60 ;;
+        h)    multiplier=3600 ;;
+        d)    multiplier=86400 ;;
+    esac
+    MAX_AGE_SECONDS=$((amount * multiplier))
+}
+
+# Prefer the newest known successful update. The system database may be
+# inaccessible to ordinary users (plocate is setgid), hence our own stamp.
+last_update() {
+    local path timestamp newest=0
+    for path in \
+        /var/lib/plocate/plocate.db \
+        /var/lib/mlocate/mlocate.db \
+        /var/local/lib/plocate/plocate.db \
+        "$STAMP"; do
+        if timestamp=$(stat -c %Y -- "$path" 2>/dev/null) &&
+           [[ $timestamp =~ ^[0-9]+$ ]] && (( timestamp > newest )); then
+            newest=$timestamp
+        fi
+    done
+    (( newest > 0 )) || return 1
+    printf '%s\n' "$newest"
+}
+
+# Sets AGE_SECONDS when an age can be determined.
+is_fresh() {
+    local now timestamp
+    AGE_SECONDS=''
+    now=$(date +%s) || return 1
+    timestamp=$(last_update) || return 1
+    [[ $timestamp =~ ^[0-9]+$ ]] || return 1
+
+    AGE_SECONDS=$((now - timestamp))
+    (( AGE_SECONDS >= 0 && AGE_SECONDS < MAX_AGE_SECONDS ))
+}
+
+refresh_database() {
+    if ! command -v updatedb >/dev/null 2>&1; then
+        error "updatedb not found; install plocate or mlocate"
+        return 1
+    fi
+
+    printf 'freshlocate: refreshing database...\n' >&2
+    if (( EUID == 0 )); then
+        if ! updatedb; then
+            error 'database refresh failed'
+            return 1
+        fi
+    else
+        if ! command -v sudo >/dev/null 2>&1; then
+            error 'sudo not found; run the update as root or use --no-update'
+            return 1
+        fi
+        if ! sudo updatedb; then
+            error 'database refresh failed'
+            return 1
+        fi
+    fi
+
+    # Timestamp only; never run this code as root via sudo.
+    if ! mkdir -p -- "$STATE_DIR" || ! touch -- "$STAMP"; then
+        error 'warning: could not save refresh timestamp; searches still work'
+    fi
+}
+
+# Parse freshlocate's flags only at the start. The rest go unchanged to locate.
+force_update=0
+no_update=0
+check_only=0
+
+while (( $# > 0 )); do
+    case $1 in
+        -h|--help)     usage; exit 0 ;;
+        -V|--version)  printf 'freshlocate %s\n' "$VERSION"; exit 0 ;;
+        -c|--check)    check_only=1; shift ;;
+        -u|--update)   force_update=1; shift ;;
+        --no-update)   no_update=1; shift ;;
+        --max-age)
+            if (( $# < 2 )); then error '--max-age needs a value'; exit 2; fi
+            MAX_AGE=$2
+            shift 2
+            ;;
+        --max-age=*)
+            MAX_AGE=${1#*=}
+            shift
+            ;;
+        --) shift; break ;;
+        *) break ;;
+    esac
+done
+
+parse_age "$MAX_AGE" || exit 2
+
+if (( force_update && no_update )); then
+    error '--update and --no-update cannot be used together'
+    exit 2
+fi
+
+if (( check_only )); then
+    if (( force_update || no_update || $# > 0 )); then
+        error '--check cannot be combined with searches or update switches'
+        exit 2
+    fi
+    if is_fresh; then
+        printf 'freshlocate: database is fresh (%s seconds old).\n' "$AGE_SECONDS"
+        exit 0
+    fi
+    if [[ -z $AGE_SECONDS ]]; then
+        printf 'freshlocate: database age unknown; an update is recommended.\n'
+    else
+        printf 'freshlocate: database is stale (%s seconds old).\n' "$AGE_SECONDS"
+    fi
+    exit 1
+fi
+
+if (( $# == 0 && ! force_update )); then
+    usage >&2
+    exit 2
+fi
+
+if (( $# > 0 )) && ! command -v locate >/dev/null 2>&1; then
+    error 'locate not found; install plocate or mlocate'
+    exit 1
+fi
+
+if (( force_update )); then
+    refresh_database || exit 1
+elif (( ! no_update )) && ! is_fresh; then
+    refresh_database || exit 1
+fi
+
+# --update by itself is a valid refresh-only operation.
+(( $# == 0 )) && exit 0
+
+# Preserve native locate options (-i, -r, -l, etc.) and its exit status.
+exec locate "$@"
